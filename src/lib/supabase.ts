@@ -45,9 +45,8 @@ export const SIGNALING_EVENTS = {
 /**
  * Crea un room en Supabase y devuelve su id.
  */
-export async function createRoom(): Promise<{ id: string, short_code: string }> {
-  // Generar short code aleatorio de 6 caracteres (ej. A7B92C)
-  const short_code = Math.random().toString(36).substring(2, 8).toUpperCase()
+export async function createRoom(): Promise<{ id: string; short_code: string }> {
+  const short_code = Math.random().toString(36).replace(/[^a-z0-9]/gi, '').substring(0, 6).toUpperCase() || 'ABC123'
 
   const { data, error } = await supabase
     .from('rooms')
@@ -55,9 +54,15 @@ export async function createRoom(): Promise<{ id: string, short_code: string }> 
     .select('id, short_code')
     .single()
 
-  if (error) throw new Error(`Error creando room: ${error.message}`)
+  if (error) {
+    if (error.message.includes('short_code') || error.message.includes('column')) {
+      throw new Error('Falta la columna short_code en la tabla rooms. Ejecuta la migración en Supabase.')
+    }
+    throw new Error(`Error creando room: ${error.message}`)
+  }
   if (!data?.id) throw new Error('Room creado sin id')
-  return { id: data.id, short_code: data.short_code as string }
+  const code = (data as { short_code?: string | null }).short_code ?? (data.id as string).replace(/-/g, '').slice(0, 6).toUpperCase()
+  return { id: data.id as string, short_code: code }
 }
 
 export async function getRoomByShortCode(shortCode: string): Promise<RoomRow | null> {

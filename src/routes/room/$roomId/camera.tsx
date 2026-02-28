@@ -32,17 +32,22 @@ function RoomCamera() {
       ? `${window.location.origin}/room/${roomId}/camera`
       : ''
 
-  const [displayCode, setDisplayCode] = useState('------')
+  // Código legible: desde short_code de la DB o derivado del id
+  const displayCode =
+    roomId.length >= 6
+      ? `${roomId.replace(/-/g, '').slice(0, 3).toUpperCase()} - ${roomId.replace(/-/g, '').slice(3, 6).toUpperCase()}`
+      : roomId.slice(0, 8).toUpperCase()
+  const [displayCodeFromDb, setDisplayCodeFromDb] = useState<string | null>(null)
 
   useEffect(() => {
-    if (roomId) {
-      getRoom(roomId).then((room) => {
-        if (room?.short_code) {
-          setDisplayCode(`${room.short_code.slice(0, 3)} - ${room.short_code.slice(3)}`)
-        }
-      })
-    }
+    if (!roomId) return
+    getRoom(roomId).then((room) => {
+      if (room?.short_code) {
+        setDisplayCodeFromDb(room.short_code.length >= 6 ? `${room.short_code.slice(0, 3)} - ${room.short_code.slice(3, 6)}` : room.short_code)
+      }
+    })
   }, [roomId])
+  const codeToShow = displayCodeFromDb ?? displayCode
 
   async function copyLink() {
     if (!cameraUrl) return
@@ -58,10 +63,53 @@ function RoomCamera() {
   useEffect(() => {
     if (!roomId) return
 
-    let stream: MediaStream | null = null
     const channel = getSignalingChannel(roomId)
 
-    const start = async () => {
+    // Supabase puede pasar el payload directo o como message.payload
+    const getPayload = (msg: unknown): SignalingPayload =>
+      (msg != null && typeof msg === 'object' && 'payload' in msg
+        ? (msg as { payload: SignalingPayload }).payload
+        : msg) as SignalingPayload
+
+    // Suscribirse primero para no perder la answer; luego enviar la oferta
+    channel
+      .on(
+        'broadcast',
+        { event: SIGNALING_EVENTS.ANSWER },
+        async (msg: unknown) => {
+          const p = getPayload(msg)
+          if (p.type !== 'answer') return
+          const pc = pcRef.current
+          if (!pc) return
+          try {
+            await applyRemoteDescription(pc, p.sdp)
+          } catch {
+            setError('Error aplicando respuesta')
+          }
+        },
+      )
+      .on(
+        'broadcast',
+        { event: SIGNALING_EVENTS.ICE_CANDIDATE },
+        async (msg: unknown) => {
+          const p = getPayload(msg)
+          if (p.type !== 'ice-candidate') return
+          const pc = pcRef.current
+          if (!pc) return
+          try {
+            await addIceCandidate(pc, p.candidate)
+          } catch {
+            /* ignorar */
+          }
+        },
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return
+        start()
+      })
+
+    async function start() {
+      let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -93,7 +141,7 @@ function RoomCamera() {
         pc.addTrack(track, stream)
       }
 
-      const removeIce = onIceCandidate(pc, (candidate) => {
+      onIceCandidate(pc, (candidate) => {
         sendSignalingMessage(channel, { type: 'ice-candidate', candidate })
       })
 
@@ -102,42 +150,10 @@ function RoomCamera() {
         sendSignalingMessage(channel, { type: 'offer', sdp: offer })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error creando oferta')
-        removeIce()
         pc.close()
-        return
+        pcRef.current = null
       }
-
-      channel
-        .on(
-          'broadcast',
-          { event: SIGNALING_EVENTS.ANSWER },
-          async (message: { payload: SignalingPayload }) => {
-            const p = message.payload
-            if (p.type !== 'answer') return
-            try {
-              await applyRemoteDescription(pc, p.sdp)
-            } catch {
-              setError('Error aplicando respuesta')
-            }
-          },
-        )
-        .on(
-          'broadcast',
-          { event: SIGNALING_EVENTS.ICE_CANDIDATE },
-          async (message: { payload: SignalingPayload }) => {
-            const p = message.payload
-            if (p.type !== 'ice-candidate') return
-            try {
-              await addIceCandidate(pc, p.candidate)
-            } catch {
-              // Candidatos tardíos se ignoran
-            }
-          },
-        )
-        .subscribe()
     }
-
-    start()
 
     return () => {
       channel.unsubscribe()
@@ -145,8 +161,9 @@ function RoomCamera() {
         pcRef.current.close()
         pcRef.current = null
       }
-      if (stream) {
-        for (const track of stream.getTracks()) track.stop()
+      const s = streamRef.current
+      if (s) {
+        for (const track of s.getTracks()) track.stop()
       }
       streamRef.current = null
     }
@@ -156,7 +173,7 @@ function RoomCamera() {
     <main className="flex min-h-screen flex-col bg-[var(--bg-base)] p-4">
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--sea-ink)]">
-          RetroCAMs
+          RetroCAM
         </h1>
         <button
           type="button"
@@ -196,7 +213,7 @@ function RoomCamera() {
           Código de conexión
         </p>
         <p className="mb-2 font-mono text-2xl font-bold text-[var(--sea-ink)]">
-          {displayCode}
+          {codeToShow}
         </p>
         <button
           type="button"

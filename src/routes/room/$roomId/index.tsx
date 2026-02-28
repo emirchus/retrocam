@@ -1,7 +1,4 @@
-import {
-  createFileRoute,
-  useNavigate,
-} from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useRef, useState, useEffect } from 'react'
 import {
   Video,
@@ -42,14 +39,14 @@ type ConnectionStatus = 'waiting' | 'connecting' | 'connected' | 'disconnected' 
 
 function RoomViewer() {
   const { roomId } = Route.useParams()
-  const navigate = useNavigate()
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<ReturnType<typeof getSignalingChannel> | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('waiting')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [displayCode, setDisplayCode] = useState('------')
+  const fallbackCode = roomId.replace(/-/g, '').slice(0, 6).toUpperCase() || '------'
+  const [displayCode, setDisplayCode] = useState(fallbackCode)
 
   // URL absoluta para OBS Browser Source
   const browserSourceUrl =
@@ -64,15 +61,15 @@ function RoomViewer() {
       : ''
 
   useEffect(() => {
-    if (roomId) {
-      getRoom(roomId).then((room) => {
-        console.log(room)
-        if (room?.short_code) {
-          setDisplayCode(`${room.short_code.slice(0, 3)}-${room.short_code.slice(3)}`)
-        }
-      })
-    }
-  }, [roomId])
+    if (!roomId) return
+    getRoom(roomId).then((room) => {
+      if (room?.short_code) {
+        setDisplayCode(room.short_code.length >= 6 ? `${room.short_code.slice(0, 3)}-${room.short_code.slice(3, 6)}` : room.short_code)
+      } else {
+        setDisplayCode(fallbackCode)
+      }
+    })
+  }, [roomId, fallbackCode])
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -91,25 +88,52 @@ function RoomViewer() {
     const channel = getSignalingChannel(roomId)
     channelRef.current = channel
 
+    // Supabase puede pasar el payload directo o como message.payload
+    const getPayload = (msg: unknown): SignalingPayload =>
+      (msg != null && typeof msg === 'object' && 'payload' in msg
+        ? (msg as { payload: SignalingPayload }).payload
+        : msg) as SignalingPayload
+
+    const iceQueue: RTCIceCandidateInit[] = []
+    let remoteDescSet = false
+
     const cleanupPc = (): void => {
+      remoteDescSet = false
+      iceQueue.length = 0
       if (pcRef.current) {
         pcRef.current.close()
         pcRef.current = null
       }
     }
 
+    const flushIceQueue = async (pc: RTCPeerConnection) => {
+      for (const c of iceQueue) {
+        try {
+          await addIceCandidate(pc, c)
+        } catch {
+          /* ignorar */
+        }
+      }
+      iceQueue.length = 0
+    }
+
     const handleOffer = async (payload: SignalingOffer): Promise<void> => {
       setStatus('connecting')
+      setError(null)
       cleanupPc()
       const pc = createPeerConnection()
       pcRef.current = pc
+      remoteDescSet = false
 
       pc.ontrack = (event: RTCTrackEvent) => {
         const video = remoteVideoRef.current
-        if (video && event.streams[0]) {
-          video.srcObject = event.streams[0]
-          setStatus('connected')
-        }
+        if (!video) return
+        const stream = event.streams?.[0] ?? new MediaStream([event.track])
+        video.srcObject = stream
+        setStatus('connected')
+        const play = () => video.play().catch(() => {})
+        play()
+        video.oncanplay = play
       }
 
       pc.onconnectionstatechange = () => {
@@ -126,6 +150,8 @@ function RoomViewer() {
 
       try {
         const answer = await createAnswer(pc, payload.sdp)
+        remoteDescSet = true
+        await flushIceQueue(pc)
         sendSignalingMessage(channel, { type: 'answer', sdp: answer })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error en answer')
@@ -135,15 +161,18 @@ function RoomViewer() {
       }
     }
 
-    const handleIceCandidate = async (
-      payload: SignalingIceCandidate,
-    ): Promise<void> => {
+    const handleIceCandidate = async (payload: SignalingIceCandidate): Promise<void> => {
       const pc = pcRef.current
       if (!pc) return
+      const cand = payload.candidate
+      if (!remoteDescSet) {
+        iceQueue.push(cand)
+        return
+      }
       try {
-        await addIceCandidate(pc, payload.candidate)
+        await addIceCandidate(pc, cand)
       } catch {
-        // Ignorar candidatos llegados tarde
+        /* ignorar candidatos tardíos */
       }
     }
 
@@ -151,16 +180,16 @@ function RoomViewer() {
       .on(
         'broadcast',
         { event: SIGNALING_EVENTS.OFFER },
-        (message: { payload: SignalingPayload }) => {
-          const p = message.payload
+        (msg: unknown) => {
+          const p = getPayload(msg)
           if (p.type === 'offer') handleOffer(p)
         },
       )
       .on(
         'broadcast',
         { event: SIGNALING_EVENTS.ICE_CANDIDATE },
-        (message: { payload: SignalingPayload }) => {
-          const p = message.payload
+        (msg: unknown) => {
+          const p = getPayload(msg)
           if (p.type === 'ice-candidate') handleIceCandidate(p)
         },
       )
@@ -325,7 +354,7 @@ function RoomViewer() {
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            muted={false}
+            muted
             className={`w-full h-full object-contain ${status === 'connected' ? 'opacity-100' : 'opacity-0'}`}
           />
 
