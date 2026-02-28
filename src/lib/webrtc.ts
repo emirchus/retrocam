@@ -79,3 +79,42 @@ export function onIceCandidate(
   pc.addEventListener('icecandidate', handler)
   return () => pc.removeEventListener('icecandidate', handler)
 }
+
+export type VideoSendParams = {
+  maxBitrate?: number // bps, ej. 2_500_000 para ~2.5 Mbps
+  maxFramerate?: number
+  scaleResolutionDownBy?: number // 1 = resolución completa
+}
+
+/**
+ * Ajusta parámetros de codificación del envío de vídeo (bitrate, fps).
+ * Debe llamarse después de addTrack y antes de createOffer.
+ * Aplica a todos los encodings (p. ej. simulcast).
+ */
+export async function setVideoSendParams(
+  pc: RTCPeerConnection,
+  params: VideoSendParams,
+): Promise<void> {
+  const sender = pc.getSenders().find((s) => s.track?.kind === 'video')
+  if (!sender) return
+  const parameters = sender.getParameters()
+  if (!parameters.encodings?.length) {
+    parameters.encodings = [{}]
+  }
+  for (const enc of parameters.encodings) {
+    if (params.maxBitrate != null) enc.maxBitrate = params.maxBitrate
+    if (params.maxFramerate != null) enc.maxFramerate = params.maxFramerate
+    if (params.scaleResolutionDownBy != null) {
+      enc.scaleResolutionDownBy = params.scaleResolutionDownBy
+    }
+  }
+  await sender.setParameters(parameters)
+}
+
+/**
+ * Sustituye el bitrate en líneas b=AS: del SDP (solo reemplazo de texto, sin tocar estructura).
+ * Evita insertar líneas o cambiar saltos de línea que puedan invalidar el SDP.
+ */
+export function setSdpVideoBitrate(sdp: string, kbps: number = 5000): string {
+  return sdp.replace(/\bb=AS:\d+\b/g, `b=AS:${kbps}`)
+}

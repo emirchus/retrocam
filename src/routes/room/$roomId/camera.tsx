@@ -11,6 +11,8 @@ import {
   applyRemoteDescription,
   addIceCandidate,
   onIceCandidate,
+  setVideoSendParams,
+  setSdpVideoBitrate,
 } from '#/lib/webrtc'
 
 export const Route = createFileRoute('/room/$roomId/camera')({
@@ -111,11 +113,23 @@ function RoomCamera() {
     async function start() {
       let stream: MediaStream
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        // Intentar buena calidad; si falla (Could not start video source), usar restricciones mínimas
+        const tryGetUserMedia = async (constraints: MediaStreamConstraints): Promise<MediaStream> => {
+          try {
+            return await navigator.mediaDevices.getUserMedia(constraints)
+          } catch (e) {
+            if (constraints.video && typeof constraints.video === 'object' && ('width' in constraints.video || 'frameRate' in constraints.video)) {
+              return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            }
+            throw e
+          }
+        }
+        stream = await tryGetUserMedia({
           video: {
             facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
           },
           audio: false,
         })
@@ -141,12 +155,22 @@ function RoomCamera() {
         pc.addTrack(track, stream)
       }
 
+      // Calidad: bitrate alto (API + SDP) y 30 fps
+      await setVideoSendParams(pc, {
+        maxBitrate: 5_000_000, // 5 Mbps
+        maxFramerate: 30,
+      })
+
       onIceCandidate(pc, (candidate) => {
         sendSignalingMessage(channel, { type: 'ice-candidate', candidate })
       })
 
       try {
-        const offer = await createOffer(pc)
+        let offer = await createOffer(pc)
+        // Forzar bitrate en SDP (b=AS:) para que el encoder lo respete
+        const sdp = setSdpVideoBitrate(offer.sdp ?? '', 5000)
+        offer = { type: offer.type, sdp }
+        await pc.setLocalDescription(offer)
         sendSignalingMessage(channel, { type: 'offer', sdp: offer })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error creando oferta')
