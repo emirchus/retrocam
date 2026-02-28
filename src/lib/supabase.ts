@@ -45,16 +45,32 @@ export const SIGNALING_EVENTS = {
 /**
  * Crea un room en Supabase y devuelve su id.
  */
-export async function createRoom(): Promise<string> {
+export async function createRoom(): Promise<{ id: string, short_code: string }> {
+  // Generar short code aleatorio de 6 caracteres (ej. A7B92C)
+  const short_code = Math.random().toString(36).substring(2, 8).toUpperCase()
+  
   const { data, error } = await supabase
     .from('rooms')
-    .insert({})
-    .select('id')
+    .insert({ short_code })
+    .select('id, short_code')
     .single()
 
   if (error) throw new Error(`Error creando room: ${error.message}`)
   if (!data?.id) throw new Error('Room creado sin id')
-  return data.id as string
+  return { id: data.id, short_code: data.short_code as string }
+}
+
+export async function getRoomByShortCode(shortCode: string): Promise<RoomRow | null> {
+  // Limpiar código (quitar espacios o guiones)
+  const code = shortCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('id, short_code, created_at')
+    .eq('short_code', code)
+    .maybeSingle()
+
+  if (error) return null
+  return data as RoomRow | null
 }
 
 /**

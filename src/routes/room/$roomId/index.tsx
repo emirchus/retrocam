@@ -3,8 +3,24 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { useRef, useState, useEffect } from 'react'
-import QRCode from 'qrcode'
 import {
+  Video,
+  Link as LinkIcon,
+  Copy,
+  Camera,
+  Monitor,
+  Settings,
+  User,
+  HelpCircle,
+  Maximize,
+  PictureInPicture,
+  Volume2,
+  FlipHorizontal,
+  VideoOff,
+  Radio,
+} from 'lucide-react'
+import {
+  getRoom,
   getSignalingChannel,
   sendSignalingMessage,
   SIGNALING_EVENTS,
@@ -31,24 +47,43 @@ function RoomViewer() {
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const channelRef = useRef<ReturnType<typeof getSignalingChannel> | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>('waiting')
-  const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [displayCode, setDisplayCode] = useState('------')
 
-  // URL absoluta para que el celular escanee el QR
+  // URL absoluta para OBS Browser Source
+  const browserSourceUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/room/${roomId}`
+      : ''
+
+  // URL para la cámara (celular)
   const cameraUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/room/${roomId}/camera`
       : ''
 
-  // Generar QR
   useEffect(() => {
-    if (!cameraUrl) return
-    QRCode.toDataURL(cameraUrl, { width: 220, margin: 2 })
-      .then(setQrDataUrl)
-      .catch(() => setQrDataUrl(''))
-  }, [cameraUrl])
+    if (roomId) {
+      getRoom(roomId).then((room) => {
+        if (room?.short_code) {
+          setDisplayCode(`${room.short_code.slice(0, 3)}-${room.short_code.slice(3)}`)
+        }
+      })
+    }
+  }, [roomId])
 
-  // Canal Realtime y lógica WebRTC (viewer: responde a offer, envía answer e ICE)
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      console.error('Error copying text')
+    }
+  }
+
+  // Canal Realtime y lógica WebRTC
   useEffect(() => {
     if (!roomId) return
 
@@ -138,76 +173,220 @@ function RoomViewer() {
   }, [roomId])
 
   return (
-    <main className="flex min-h-screen flex-col bg-[var(--bg-base)] p-4">
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[var(--sea-ink)]">RetroCAM</h1>
-        <button
-          type="button"
-          onClick={() => navigate({ to: '/' })}
-          className="text-sm text-[var(--lagoon-deep)] underline"
-        >
-          Salir
-        </button>
-      </header>
+    <div className="flex h-screen w-full bg-[#0a0f16] text-slate-300 font-sans overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-[280px] bg-[#111827] border-r border-slate-800 flex flex-col">
+        <div className="p-5 flex items-center gap-3 border-b border-slate-800">
+          <div className="bg-blue-600 p-1.5 rounded-lg text-white">
+            <Video className="w-5 h-5" />
+          </div>
+          <h1 className="text-white font-bold text-lg tracking-wide">RetroCAM</h1>
+        </div>
 
-      <div className="grid flex-1 gap-6 md:grid-cols-2">
-        {/* QR y código */}
-        <section className="flex flex-col items-center rounded-xl bg-[var(--surface)] p-6">
-          <p className="mb-2 text-sm font-medium text-[var(--sea-ink-soft)]">
-            Escanea con tu celular
-          </p>
-          {qrDataUrl ? (
-            <img
-              src={qrDataUrl}
-              alt="QR para abrir la cámara"
-              className="rounded-lg border border-[var(--line)]"
-            />
-          ) : (
-            <div className="h-[220px] w-[220px] animate-pulse rounded-lg bg-[var(--line)]" />
-          )}
-          <p className="mt-3 text-xs text-[var(--sea-ink-soft)]">
-            O abre: <span className="font-mono">{cameraUrl}</span>
-          </p>
-        </section>
-
-        {/* Video remoto */}
-        <section className="flex flex-col rounded-xl bg-[var(--surface)] p-6">
-          <p className="mb-2 text-sm font-medium text-[var(--sea-ink-soft)]">
-            Monitor
-          </p>
-          <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--sea-ink)]/10">
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              muted={false}
-              className="h-full w-full object-contain"
-            />
-            {status !== 'connected' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[var(--sea-ink-soft)]">
-                <span className="text-4xl opacity-50">📷</span>
-                <span>
-                  {status === 'waiting' || status === 'reconnecting'
-                    ? 'Listo para recibir'
-                    : status === 'connecting'
-                      ? 'Conectando…'
-                      : 'Desconectado'}
-                </span>
-                <span className="text-xs">Introduce el código en el celular</span>
+        <div className="flex-1 overflow-y-auto p-5 space-y-8">
+          {/* Connection */}
+          <section>
+            <h2 className="text-[10px] font-bold text-slate-500 tracking-wider mb-3">CONNECTION</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Connection Code (Link Mobile)</label>
+                <div className="w-full bg-[#0a0f16] border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-sm tracking-widest text-center">
+                  {displayCode}
+                </div>
               </div>
-            )}
+              <button
+                onClick={() => copyToClipboard(cameraUrl)}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2.5 flex items-center justify-center gap-2 text-sm font-semibold transition-colors"
+              >
+                <Radio className="w-4 h-4" />
+                <span>Copy Mobile Link</span>
+              </button>
+            </div>
+          </section>
+
+          {/* Video Settings */}
+          <section>
+            <h2 className="text-[10px] font-bold text-slate-500 tracking-wider mb-3">VIDEO SETTINGS</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Target Resolution</label>
+                <select className="w-full bg-[#0a0f16] border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm appearance-none outline-none focus:border-blue-500 cursor-pointer">
+                  <option>1080p (FHD)</option>
+                  <option>720p (HD)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">Frame Rate (FPS)</label>
+                <div className="flex p-1 bg-[#0a0f16] rounded-lg border border-slate-800">
+                  <button className="flex-1 py-1.5 text-xs font-semibold text-blue-400 bg-blue-600/10 rounded-md">
+                    60 FPS
+                  </button>
+                  <button className="flex-1 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors">
+                    30 FPS
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs text-slate-400">Digital Zoom</label>
+                  <span className="text-xs text-blue-400">1.0x</span>
+                </div>
+                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-600 w-1/4"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Streamer Tools */}
+          <section>
+            <h2 className="text-[10px] font-bold text-slate-500 tracking-wider mb-3">STREAMER TOOLS</h2>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-[#0a0f16] border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm flex items-center gap-2 overflow-hidden whitespace-nowrap">
+                  <LinkIcon className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span className="truncate">OBS Browser Source</span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(browserSourceUrl)}
+                  className="bg-[#0a0f16] border border-slate-700 hover:border-slate-500 text-slate-400 rounded-lg p-2.5 transition-colors"
+                  title="Copy OBS Url"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+
+              <button className="w-full bg-[#0a0f16] border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-2.5 text-slate-300 text-sm flex items-center gap-2 transition-colors">
+                <Camera className="w-4 h-4 text-slate-500" />
+                <span>Capture Screenshot</span>
+              </button>
+            </div>
+
+            {copied && <p className="text-xs text-green-400 mt-2">Enlace copiado!</p>}
+          </section>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-5 border-t border-slate-800">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-slate-500">Status</span>
+            <div className="flex items-center gap-1.5 font-medium">
+              <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+              <span className={status === 'connected' ? 'text-green-400' : 'text-slate-400'}>
+                {status === 'connected' ? 'CONNECTED' : status.toUpperCase()}
+              </span>
+            </div>
           </div>
-          {error && (
-            <p className="mt-2 text-sm text-red-600" role="alert">
-              {error}
-            </p>
+          <div className="flex justify-between items-center text-xs mt-2">
+            <span className="text-slate-500">Latency</span>
+            <span className="text-slate-400 font-mono">-- ms</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col relative">
+        {/* Header */}
+        <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-[#0a0f16]/80 backdrop-blur z-10 absolute top-0 left-0 right-0">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 text-white">
+              <Monitor className="w-4 h-4" />
+              <span className="font-medium text-sm">Receiver Node #{displayCode.split('-')[0] || '12'}</span>
+            </div>
+            <div className="h-4 w-px bg-slate-700"></div>
+            <nav className="flex gap-4">
+              <button className="text-blue-400 font-medium text-sm border-b-2 border-blue-500 py-5">
+                Monitor
+              </button>
+              <button className="text-slate-400 hover:text-slate-200 font-medium text-sm py-5 transition-colors">
+                Gallery
+              </button>
+              <button className="text-slate-400 hover:text-slate-200 font-medium text-sm py-5 transition-colors">
+                Logs
+              </button>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4 text-slate-400">
+            <button className="hover:text-white transition-colors"><HelpCircle className="w-4 h-4" /></button>
+            <button className="hover:text-white transition-colors"><Settings className="w-4 h-4" /></button>
+            <div className="w-7 h-7 rounded-full bg-blue-900/30 flex items-center justify-center text-blue-400 ml-2">
+              <User className="w-4 h-4" />
+            </div>
+          </div>
+        </header>
+
+        {/* Video Area */}
+        <div className="flex-1 bg-[#05080c] relative flex items-center justify-center pt-16 pb-12 overflow-hidden">
+
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted={false}
+            className={`w-full h-full object-contain ${status === 'connected' ? 'opacity-100' : 'opacity-0'}`}
+          />
+
+          {status !== 'connected' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="w-20 h-20 border-2 border-dashed border-slate-700 rounded-2xl flex items-center justify-center mb-6 bg-slate-800/20">
+                <VideoOff className="w-8 h-8 text-slate-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-3">Ready to Receive</h2>
+              <p className="text-slate-400 text-sm max-w-md text-center mb-6 leading-relaxed">
+                Enter a connection code from your 'WebCam Share' broadcaster to begin the low-latency monitoring feed.
+              </p>
+              <div className="flex items-center gap-4 w-64">
+                <div className="h-px flex-1 bg-slate-800"></div>
+                <span className="text-[10px] font-bold tracking-widest text-slate-500">
+                  {status === 'waiting' || status === 'reconnecting' ? 'WAITING FOR STREAM' : 'CONNECTING...'}
+                </span>
+                <div className="h-px flex-1 bg-slate-800"></div>
+              </div>
+
+              {error && (
+                <p className="mt-6 text-sm text-red-400 bg-red-400/10 px-4 py-2 rounded-lg border border-red-400/20">
+                  {error}
+                </p>
+              )}
+            </div>
           )}
-          <div className="mt-3 flex items-center gap-4 text-xs text-[var(--sea-ink-soft)]">
-            <span>Estado: {status === 'connected' ? '● CONECTADO' : '● OFFLINE'}</span>
-            <span>Protocolo: WebRTC</span>
+
+          {/* Floating Controls Overlay */}
+          {status === 'connected' && (
+            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#111827]/80 backdrop-blur-md border border-slate-700/50 rounded-2xl px-4 py-2.5 flex items-center gap-4 shadow-2xl">
+              <button className="text-slate-400 hover:text-white p-1.5 transition-colors"><Maximize className="w-4 h-4" /></button>
+              <button className="text-slate-400 hover:text-white p-1.5 transition-colors"><PictureInPicture className="w-4 h-4" /></button>
+              <button className="text-slate-400 hover:text-white p-1.5 transition-colors"><Volume2 className="w-4 h-4" /></button>
+              <div className="w-px h-4 bg-slate-700 mx-1"></div>
+              <button className="text-slate-400 hover:text-white p-1.5 transition-colors"><FlipHorizontal className="w-4 h-4" /></button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <footer className="h-8 border-t border-slate-800 bg-[#0a0f16] flex items-center justify-between px-6 text-[10px] tracking-wide font-medium text-slate-500 absolute bottom-0 left-0 right-0">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+              <span>BITRATE: {status === 'connected' ? '2.4 MBPS' : '0 KBPS'}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-600"></div>
+              <span>PROTOCOL: WEBRTC</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-600"></div>
+              <span>CODEC: H.264</span>
+            </div>
           </div>
-        </section>
-      </div>
-    </main>
+          <div className="flex items-center gap-4">
+            <span>SERVER: P2P</span>
+            <span className="text-blue-500 font-bold">V1.0.0 MVP</span>
+          </div>
+        </footer>
+      </main>
+    </div>
   )
 }

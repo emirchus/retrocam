@@ -622,14 +622,17 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          short_code: string | null
         }
         Insert: {
           created_at?: string
           id?: string
+          short_code?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          short_code?: string | null
         }
         Relationships: []
       }

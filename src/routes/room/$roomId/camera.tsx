@@ -3,11 +3,7 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { useRef, useState, useEffect } from 'react'
-import {
-  getSignalingChannel,
-  sendSignalingMessage,
-  SIGNALING_EVENTS,
-} from '#/lib/supabase'
+import { getRoom, getSignalingChannel, sendSignalingMessage, SIGNALING_EVENTS } from '#/lib/supabase'
 import type { SignalingPayload } from '#/lib/supabase'
 import {
   createPeerConnection,
@@ -36,10 +32,17 @@ function RoomCamera() {
       ? `${window.location.origin}/room/${roomId}/camera`
       : ''
 
-  // Código de sala legible (ej. primeros 8 chars del uuid en formato A7-B92)
-  const displayCode = roomId
-    ? `${roomId.slice(0, 2).toUpperCase()} - ${roomId.slice(2, 5).toUpperCase()}`
-    : ''
+  const [displayCode, setDisplayCode] = useState('------')
+
+  useEffect(() => {
+    if (roomId) {
+      getRoom(roomId).then((room) => {
+        if (room?.short_code) {
+          setDisplayCode(`${room.short_code.slice(0, 3)} - ${room.short_code.slice(3)}`)
+        }
+      })
+    }
+  }, [roomId])
 
   async function copyLink() {
     if (!cameraUrl) return
