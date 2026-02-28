@@ -66,6 +66,7 @@ function RoomViewer() {
   useEffect(() => {
     if (roomId) {
       getRoom(roomId).then((room) => {
+        console.log(room)
         if (room?.short_code) {
           setDisplayCode(`${room.short_code.slice(0, 3)}-${room.short_code.slice(3)}`)
         }

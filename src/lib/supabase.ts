@@ -48,7 +48,7 @@ export const SIGNALING_EVENTS = {
 export async function createRoom(): Promise<{ id: string, short_code: string }> {
   // Generar short code aleatorio de 6 caracteres (ej. A7B92C)
   const short_code = Math.random().toString(36).substring(2, 8).toUpperCase()
-  
+
   const { data, error } = await supabase
     .from('rooms')
     .insert({ short_code })
@@ -65,7 +65,7 @@ export async function getRoomByShortCode(shortCode: string): Promise<RoomRow | n
   const code = shortCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, short_code, created_at')
+    .select('*')
     .eq('short_code', code)
     .maybeSingle()
 
@@ -79,7 +79,7 @@ export async function getRoomByShortCode(shortCode: string): Promise<RoomRow | n
 export async function getRoom(id: string): Promise<RoomRow | null> {
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, created_at')
+    .select('*')
     .eq('id', id)
     .maybeSingle()
 
