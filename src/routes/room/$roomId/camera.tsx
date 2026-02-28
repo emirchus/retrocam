@@ -153,7 +153,7 @@ function RoomCamera() {
     <main className="flex min-h-screen flex-col bg-[var(--bg-base)] p-4">
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-[var(--sea-ink)]">
-          RetroCAM
+          RetroCAMs
         </h1>
         <button
           type="button"

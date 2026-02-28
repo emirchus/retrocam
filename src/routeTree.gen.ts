@@ -10,52 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RoomRoomIdRouteImport } from './routes/room.$roomId'
-import { Route as RoomRoomIdCameraRouteImport } from './routes/room.$roomId.camera'
+import { Route as RoomRoomIdIndexRouteImport } from './routes/room/$roomId/index'
+import { Route as RoomRoomIdCameraRouteImport } from './routes/room/$roomId/camera'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoomRoomIdRoute = RoomRoomIdRouteImport.update({
-  id: '/room/$roomId',
-  path: '/room/$roomId',
+const RoomRoomIdIndexRoute = RoomRoomIdIndexRouteImport.update({
+  id: '/room/$roomId/',
+  path: '/room/$roomId/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomRoomIdCameraRoute = RoomRoomIdCameraRouteImport.update({
-  id: '/camera',
-  path: '/camera',
-  getParentRoute: () => RoomRoomIdRoute,
+  id: '/room/$roomId/camera',
+  path: '/room/$roomId/camera',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
   '/room/$roomId/camera': typeof RoomRoomIdCameraRoute
+  '/room/$roomId/': typeof RoomRoomIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
   '/room/$roomId/camera': typeof RoomRoomIdCameraRoute
+  '/room/$roomId': typeof RoomRoomIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/room/$roomId': typeof RoomRoomIdRouteWithChildren
   '/room/$roomId/camera': typeof RoomRoomIdCameraRoute
+  '/room/$roomId/': typeof RoomRoomIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/room/$roomId' | '/room/$roomId/camera'
+  fullPaths: '/' | '/room/$roomId/camera' | '/room/$roomId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/room/$roomId' | '/room/$roomId/camera'
-  id: '__root__' | '/' | '/room/$roomId' | '/room/$roomId/camera'
+  to: '/' | '/room/$roomId/camera' | '/room/$roomId'
+  id: '__root__' | '/' | '/room/$roomId/camera' | '/room/$roomId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  RoomRoomIdRoute: typeof RoomRoomIdRouteWithChildren
+  RoomRoomIdCameraRoute: typeof RoomRoomIdCameraRoute
+  RoomRoomIdIndexRoute: typeof RoomRoomIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -67,38 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/room/$roomId': {
-      id: '/room/$roomId'
+    '/room/$roomId/': {
+      id: '/room/$roomId/'
       path: '/room/$roomId'
-      fullPath: '/room/$roomId'
-      preLoaderRoute: typeof RoomRoomIdRouteImport
+      fullPath: '/room/$roomId/'
+      preLoaderRoute: typeof RoomRoomIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/room/$roomId/camera': {
       id: '/room/$roomId/camera'
-      path: '/camera'
+      path: '/room/$roomId/camera'
       fullPath: '/room/$roomId/camera'
       preLoaderRoute: typeof RoomRoomIdCameraRouteImport
-      parentRoute: typeof RoomRoomIdRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface RoomRoomIdRouteChildren {
-  RoomRoomIdCameraRoute: typeof RoomRoomIdCameraRoute
-}
-
-const RoomRoomIdRouteChildren: RoomRoomIdRouteChildren = {
-  RoomRoomIdCameraRoute: RoomRoomIdCameraRoute,
-}
-
-const RoomRoomIdRouteWithChildren = RoomRoomIdRoute._addFileChildren(
-  RoomRoomIdRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  RoomRoomIdRoute: RoomRoomIdRouteWithChildren,
+  RoomRoomIdCameraRoute: RoomRoomIdCameraRoute,
+  RoomRoomIdIndexRoute: RoomRoomIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

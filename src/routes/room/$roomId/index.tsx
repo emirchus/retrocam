@@ -18,7 +18,7 @@ import {
 } from '#/lib/webrtc'
 import type { SignalingOffer, SignalingIceCandidate } from '#/lib/supabase'
 
-export const Route = createFileRoute('/room/$roomId')({
+export const Route = createFileRoute('/room/$roomId/')({
   component: RoomViewer,
 })
 
